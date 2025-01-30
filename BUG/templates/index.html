@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bug Analysis Tool</title>
+    <link rel="stylesheet" href="../static/css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;600&display=swap" rel="stylesheet">
+
+    <!-- Fix for favicon issue -->
+    <link rel="icon" href="data:," />
+</head>
+<body>
+    <header>
+        <h1>Bug Analysis Dashboard</h1>
+    </header>
+
+    <section class="dashboard">
+        <div class="prediction-panel">
+            <h2>Bug Prediction</h2>
+            <div class="input-box">
+                <label for="bug-description">Describe the Bug:</label>
+                <textarea id="bug-description" rows="5" placeholder="Enter the bug description here..."></textarea>
+                <button id="predict-button">Predict Status</button>
+                <p id="warning-message" class="warning-message"></p>  <!-- Added warning message -->
+
+                <!-- Added download link for the code_changes.dif file -->
+                <a id="download-report" href="/download_report" download class="disabled-link">Download Bug Report</a>
+            </div>
+
+            <!-- Last description display -->
+            <div class="last-description">
+                <p><strong>Last Description:</strong> <span id="last-description">No previous description available.</span></p>
+            </div>
+
+            <div class="prediction-result">
+                <h3>Prediction Results</h3>
+                <div class="card">
+                    <div id="predicted-status-container" style="opacity: 0;">
+                        <p><strong>Status (Resolution): </strong> <span id="status">Not Available</span></p>
+                        <p><strong>Fix Version: </strong> <span id="fix-version">Not Available</span></p>
+                        <p><strong>Most Similar Bugs:</strong></p>
+                        <ul id="similar-bugs-list">
+                            <li>No similar bugs found.</li>
+                        </ul>
+                        <p><strong>Closure Comments:</strong></p>
+                        <ul id="closure-comments-list">
+                            <!-- Closure comments will be populated here -->
+                        </ul>
+                    </div>
+                    <div id="loading-spinner" style="display:none;">
+                        <img src="https://www.google.com/images/spin-32.gif" alt="Loading...">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <p>Bug Analysis Tool - Powered by AI</p>
+    </footer>
+
+    <script>
+      // Function to perform the prediction request
+async function predictBugStatus(description) {
+    const warningMessageElement = document.getElementById("warning-message");
+    const loadingSpinner = document.getElementById("loading-spinner");
+    const resultContainer = document.getElementById("predicted-status-container");
+    const bugDescriptionElement = document.getElementById("bug-description");
+    const lastDescriptionElement = document.getElementById("last-description");
+    const downloadButton = document.getElementById("download-report");
+
+    if (!description.trim()) {
+        warningMessageElement.textContent = "Please enter a bug description before predicting.";
+        return;
+    }
+
+    // Save the last description entered
+    localStorage.setItem("lastBugDescription", description);
+
+    // Clear the description box after submission
+    bugDescriptionElement.value = '';
+
+    // Update the Last Description field
+    lastDescriptionElement.textContent = description;
+
+    warningMessageElement.textContent = '';  // Clear any previous warning
+    resultContainer.style.opacity = 0;
+    loadingSpinner.style.display = "block";
+
+    const response = await fetch("/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description })
+    });
+
+    const data = await response.json();
+    loadingSpinner.style.display = "none";
+    resultContainer.style.opacity = 1;
+
+    // Handle result from the backend
+    document.getElementById("status").textContent = data.status || "No status available.";
+    document.getElementById("fix-version").textContent = data.fix_version || "No fix version available.";
+
+    // Handle most similar bugs
+    const similarBugsList = document.getElementById("similar-bugs-list");
+    similarBugsList.innerHTML = '';  // Clear previous list
+
+    data.most_similar_bugs.forEach((bug, index) => {
+        const listItem = document.createElement("li");
+
+        // Get the Jira link for the current bug
+        const jiraLink = data.jira_links[index];  // Corresponding Jira link
+
+        // Extract the ISSUE ID from the Jira link
+        const ISSUEID = extractISSUEIDFromJiraLink(jiraLink);
+
+        // Get the bug description (after the ID)
+        const bugDescription = bug.split(' ').slice(1).join(' ');  // Get the rest of the description
+
+        // Create the  ID link
+        const IssueLink = `<a href="${IssueLink}" target="_blank">${issueID}</a>`;
+
+        // Combine the ID and the plain description
+        listItem.innerHTML = `${issueLink} - ${bugDescription}`;
+        similarBugsList.appendChild(listItem);
+    });
+
+    // Handle closure comments
+    const closureCommentsList = document.getElementById("closure-comments-list");
+    closureCommentsList.innerHTML = '';  // Clear previous comments
+
+    data.summarized_comments.forEach((comment) => {
+        const listItem = document.createElement("li");
+        listItem.textContent = comment;
+        closureCommentsList.appendChild(listItem);
+    });
+
+    // Show warning message if any
+    if (data.warning_message) {
+        warningMessageElement.textContent = data.warning_message;
+    }
+
+    // Enable or disable the download button based on status
+    if (data.status === 'Invalid Input' || !data.status) {
+        downloadButton.classList.add('disabled-link');
+        downloadButton.classList.remove('enabled-link');
+    } else {
+        downloadButton.classList.add('enabled-link');
+        downloadButton.classList.remove('disabled-link');
+    }
+}
+
+// Helper function to extract the ISSUE ID from the Jira link
+function extractISSUEIDFromJiraLink(jiraLink) {
+    // Assuming the ISSUE ID is the last part of the Jira URL, like ""
+    const parts = jiraLink.split('/');
+    const issueID = parts[parts.length - 1];  // Get the last part (issue ID)
+    return issueID;
+}
+
+// On page load, restore the last description if available
+window.addEventListener("load", function() {
+    const lastDescription = localStorage.getItem("lastBugDescription");
+    if (lastDescription) {
+        document.getElementById("last-description").textContent = lastDescription;
+    }
+});
+
+// Set up the event listener for the Predict button
+document.getElementById("predict-button").addEventListener("click", function() {
+    const bugDescription = document.getElementById("bug-description").value;
+    predictBugStatus(bugDescription);
+});
+
+
+    </script>
+</body>
+</html>
